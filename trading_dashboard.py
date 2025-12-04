@@ -496,7 +496,7 @@ ob_col1, ob_col2 = st.columns([3, 1])
 
 with ob_col1:
 
-    # --- 修复开始：增加空数据检查 ---
+    # --- 修复开始：兼容 OKX/Binance 格式差异 ---
 
     # 只有当 bids 和 asks 都有数据时，才进行绘图
 
@@ -504,15 +504,25 @@ with ob_col1:
 
         try:
 
-            # 1. 安全创建 DataFrame
+            # 1. 数据清洗：无论交易返回几列数据，我们只截取前两列 (Price, Vol)
 
-            bids_df = pd.DataFrame(depth['bids'], columns=['price', 'vol']).astype(float).sort_values('price')
+            # 这样可以完美解决 OKX 返回3列导致报错的问题
 
-            asks_df = pd.DataFrame(depth['asks'], columns=['price', 'vol']).astype(float).sort_values('price')
+            bids_clean = [item[:2] for item in depth['bids']]
+
+            asks_clean = [item[:2] for item in depth['asks']]
+
+
+
+            # 2. 安全创建 DataFrame
+
+            bids_df = pd.DataFrame(bids_clean, columns=['price', 'vol']).astype(float).sort_values('price')
+
+            asks_df = pd.DataFrame(asks_clean, columns=['price', 'vol']).astype(float).sort_values('price')
 
             
 
-            # 2. 计算累计量 (Cumulative)
+            # 3. 计算累计量 (Cumulative)
 
             bids_df['cumulative'] = bids_df['vol'].cumsum()
 
@@ -520,7 +530,7 @@ with ob_col1:
 
             
 
-            # 3. 绘图
+            # 4. 绘图
 
             fig = go.Figure()
 
@@ -585,8 +595,6 @@ with ob_col1:
         # 如果数据为空，显示占位符
 
         st.info("⌛️ 盘口数据加载中，或交易所暂未返回深度数据...")
-
-        # --- 修复结束 ---
 
 
 

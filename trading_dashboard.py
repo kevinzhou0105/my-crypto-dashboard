@@ -24,6 +24,114 @@ import time
 
 st.set_page_config(page_title="Alpha交易员战情室", layout="wide", page_icon="📈")
 
+# --- 🎨 界面美化：现代仪表盘风格 (Modern SaaS) ---
+
+st.markdown("""
+
+<style>
+
+    /* 1. 全局背景：浅灰白，护眼且干净 */
+
+    .stApp {
+
+        background-color: #f8f9fa;
+
+    }
+
+    
+
+    /* 2. 顶部 Banner：隐藏默认红线，调整Padding */
+
+    header {visibility: hidden;}
+
+    .main .block-container {
+
+        padding-top: 2rem;
+
+        padding-bottom: 2rem;
+
+    }
+
+    /* 3. 指标卡片 (Metrics)：悬浮圆角卡片效果 */
+
+    div[data-testid="stMetric"] {
+
+        background-color: #ffffff;
+
+        border-radius: 16px;
+
+        padding: 20px 24px;
+
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05); /* 柔和阴影 */
+
+        border: 1px solid #f1f3f5;
+
+        transition: transform 0.2s;
+
+    }
+
+    div[data-testid="stMetric"]:hover {
+
+        transform: translateY(-2px); /* 鼠标悬停轻微上浮 */
+
+        box-shadow: 0 6px 16px rgba(0, 0, 0, 0.08);
+
+    }
+
+    /* 4. 指标文字优化 */
+
+    div[data-testid="stMetricLabel"] {
+
+        font-size: 14px;
+
+        color: #868e96; /* 浅灰标签 */
+
+        font-weight: 500;
+
+    }
+
+    div[data-testid="stMetricValue"] {
+
+        font-family: "SF Pro Display", -apple-system, BlinkMacSystemFont, sans-serif;
+
+        font-weight: 700;
+
+        color: #212529; /* 深黑数字 */
+
+    }
+
+    /* 5. 提示框 (Info/Warning) 样式优化 */
+
+    div[data-testid="stAlert"] {
+
+        border-radius: 12px;
+
+        border: none;
+
+        box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+
+    }
+
+    
+
+    /* 6. 标题渐变色 (品牌感) */
+
+    h1 {
+
+        background: -webkit-linear-gradient(45deg, #4facfe, #00f2fe);
+
+        -webkit-background-clip: text;
+
+        -webkit-text-fill-color: transparent;
+
+        font-weight: 800;
+
+    }
+
+</style>
+
+""", unsafe_allow_html=True)
+
 st.title("🔥 Alpha Trader 监控面板")
 
 st.markdown("---")
@@ -618,7 +726,7 @@ if price > 0:
 
         
 
-        # --- 图表 A: 资金费率趋势 ---
+        # --- 图表 A: 资金费率趋势 (现代风) ---
 
         st.subheader("1. 资金费率历史走势")
 
@@ -628,69 +736,125 @@ if price > 0:
 
             x=history_df['timestamp'], 
 
-            y=history_df['funding_rate'] * 100, # 乘100变百分比
+            y=history_df['funding_rate'] * 100, 
 
-            mode='lines+markers',
+            mode='lines',
+
+            fill='tozeroy',  # ✨ 关键：填充面积
 
             name='费率 %',
 
-            line=dict(color='#00F0FF', width=2)
+            line=dict(color='#4facfe', width=3), # 现代亮蓝
+
+            fillcolor='rgba(79, 172, 254, 0.1)'  # 半透明填充
 
         ))
 
-        # 警戒线
+        
 
-        fig_fr.add_hline(y=0.01, line_dash="dot", line_color="green", annotation_text="基准")
+        # 警戒线 (样式微调)
 
-        fig_fr.add_hline(y=0.05, line_dash="dot", line_color="red", annotation_text="高费率")
+        fig_fr.add_hline(y=0.01, line_dash="dash", line_color="#adb5bd", annotation_text="基准")
 
-        fig_fr.update_layout(height=300, margin=dict(t=10, b=0), yaxis_title="费率 (%)")
+        fig_fr.add_hline(y=0.05, line_dash="dash", line_color="#ff6b6b", annotation_text="高费率")
+
+        
+
+        # 布局美化
+
+        fig_fr.update_layout(
+
+            height=300, 
+
+            margin=dict(t=10, b=0, l=0, r=0),
+
+            paper_bgcolor='rgba(0,0,0,0)', # 透明背景
+
+            plot_bgcolor='rgba(0,0,0,0)',  # 透明绘图区
+
+            yaxis=dict(gridcolor='#f1f3f5'), # 极淡的网格线
+
+            xaxis=dict(gridcolor='#f1f3f5'),
+
+            yaxis_title="费率 (%)"
+
+        )
 
         st.plotly_chart(fig_fr, use_container_width=True)
 
-
-
-        # --- 图表 B: 价格 vs OI (双轴图) ---
+        # --- 图表 B: 价格 vs OI (现代风) ---
 
         st.subheader("2. 价格 vs 持仓量 (Price & OI)")
 
         
 
-        # 创建双Y轴图表
-
         fig_oi = make_subplots(specs=[[{"secondary_y": True}]])
 
-
-
-        # 轴1：价格 (左轴)
+        # 轴1：价格 (橙色渐变风)
 
         fig_oi.add_trace(
 
-            go.Scatter(x=history_df['timestamp'], y=history_df['price'], name="BTC价格", line=dict(color='orange')),
+            go.Scatter(
+
+                x=history_df['timestamp'], 
+
+                y=history_df['price'], 
+
+                name="BTC价格", 
+
+                mode='lines',
+
+                line=dict(color='#fa709a', width=3) # 蜜桃粉橙
+
+            ),
 
             secondary_y=False,
 
         )
 
-
-
-        # 轴2：OI (右轴)
+        # 轴2：OI (紫色)
 
         fig_oi.add_trace(
 
-            go.Scatter(x=history_df['timestamp'], y=history_df['oi'], name="持仓量(OI)", line=dict(color='purple', dash='dot')),
+            go.Scatter(
+
+                x=history_df['timestamp'], 
+
+                y=history_df['oi'], 
+
+                name="持仓量(OI)", 
+
+                mode='lines',
+
+                line=dict(color='#667eea', width=2, dash='dot') # 皇家蓝
+
+            ),
 
             secondary_y=True,
 
         )
 
+        fig_oi.update_layout(
 
+            height=350, 
 
-        fig_oi.update_layout(height=350, margin=dict(t=10, b=0), hovermode="x unified")
+            margin=dict(t=10, b=0, l=0, r=0),
+
+            paper_bgcolor='rgba(0,0,0,0)',
+
+            plot_bgcolor='rgba(0,0,0,0)',
+
+            yaxis=dict(gridcolor='#f1f3f5', showgrid=True),
+
+            hovermode="x unified"
+
+        )
 
         fig_oi.update_yaxes(title_text="价格 (USDT)", secondary_y=False)
 
-        fig_oi.update_yaxes(title_text="持仓量", secondary_y=True)
+        fig_oi.update_yaxes(title_text="持仓量", secondary_y=True, showgrid=False)
+
+        
 
         st.plotly_chart(fig_oi, use_container_width=True)
 

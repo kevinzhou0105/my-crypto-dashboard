@@ -2,9 +2,13 @@ import streamlit as st
 
 import ccxt
 
+import os
+
 import pandas as pd
 
 import plotly.graph_objects as go
+
+from plotly.subplots import make_subplots
 
 import yfinance as yf
 
@@ -192,6 +196,108 @@ def get_mstr_data():
 
 
 
+# --- 历史数据管理模块 ---
+
+
+
+# --- 💾 历史数据管理模块 (新增) ---
+
+
+
+def update_market_history(current_price, current_funding, current_oi):
+
+    file_path = 'market_history.csv' # 文件会保存在脚本同级目录
+
+    now = datetime.now()
+
+    
+
+    # 1. 初始化 DataFrame
+
+    if os.path.exists(file_path):
+
+        try:
+
+            df = pd.read_csv(file_path)
+
+            # 转换时间列格式
+
+            df['timestamp'] = pd.to_datetime(df['timestamp'])
+
+        except:
+
+            # 如果文件损坏，重置
+
+            df = pd.DataFrame(columns=['timestamp', 'price', 'funding_rate', 'oi'])
+
+    else:
+
+        # 如果文件不存在，新建
+
+        df = pd.DataFrame(columns=['timestamp', 'price', 'funding_rate', 'oi'])
+
+    # 2. 写入逻辑：防抖动
+
+    # 只有当文件为空，或者最后一条数据距离现在超过 60 秒才写入
+
+    should_save = True
+
+    if not df.empty:
+
+        last_time = df.iloc[-1]['timestamp']
+
+        # 计算时间差
+
+        time_diff = (now - last_time).total_seconds()
+
+        if time_diff < 60:  # 不足60秒，不保存
+
+            should_save = False
+
+    
+
+    if should_save:
+
+        # 构造新数据
+
+        new_data = pd.DataFrame([{
+
+            'timestamp': now,
+
+            'price': float(current_price),
+
+            'funding_rate': float(current_funding),
+
+            'oi': float(current_oi)
+
+        }])
+
+        
+
+        # 拼接并处理空值
+
+        if not df.empty:
+
+            df = pd.concat([df, new_data], ignore_index=True)
+
+        else:
+
+            df = new_data
+
+            
+
+        # 💾 保存回文件
+
+        df.to_csv(file_path, index=False)
+
+        print(f"✅ 数据已保存: {now.strftime('%H:%M:%S')}") # 终端提示
+
+    
+
+    return df
+
+
+
 # --- 2. 逻辑分析模块 (策略核心) ---
 
 
@@ -364,6 +470,12 @@ symbol_select = st.sidebar.selectbox("选择币种", ["BTC/USDT", "ETH/USDT"])
 
 refresh = st.sidebar.button("刷新数据")
 
+# --- 🔄 自动刷新模块 ---
+
+st.sidebar.markdown("---")
+
+auto_refresh = st.sidebar.checkbox('⚡️ 开启自动采集 (每60秒)', value=False)
+
 
 
 # Main Data Fetch
@@ -477,6 +589,118 @@ with c2:
     st.metric("未平仓合约 (OI)", f"{oi:,.0f} {symbol_select.split('/')[0]}")
 
     st.info("💡 记得对比价格走势：价格新高+OI跌=跑路; 价格新高+OI高=趋势健康")
+
+
+
+st.markdown("---")
+
+
+
+st.markdown("---")
+
+st.header("📈 核心指标趋势追踪 (每分钟记录)")
+
+
+
+# 1. 只有当获取到有效价格时，才进行记录
+
+if price > 0:
+
+    history_df = update_market_history(price, funding_rate, oi)
+
+
+
+    if not history_df.empty and len(history_df) > 1:
+
+        # 准备数据
+
+        history_df = history_df.sort_values('timestamp')
+
+        
+
+        # --- 图表 A: 资金费率趋势 ---
+
+        st.subheader("1. 资金费率历史走势")
+
+        fig_fr = go.Figure()
+
+        fig_fr.add_trace(go.Scatter(
+
+            x=history_df['timestamp'], 
+
+            y=history_df['funding_rate'] * 100, # 乘100变百分比
+
+            mode='lines+markers',
+
+            name='费率 %',
+
+            line=dict(color='#00F0FF', width=2)
+
+        ))
+
+        # 警戒线
+
+        fig_fr.add_hline(y=0.01, line_dash="dot", line_color="green", annotation_text="基准")
+
+        fig_fr.add_hline(y=0.05, line_dash="dot", line_color="red", annotation_text="高费率")
+
+        fig_fr.update_layout(height=300, margin=dict(t=10, b=0), yaxis_title="费率 (%)")
+
+        st.plotly_chart(fig_fr, use_container_width=True)
+
+
+
+        # --- 图表 B: 价格 vs OI (双轴图) ---
+
+        st.subheader("2. 价格 vs 持仓量 (Price & OI)")
+
+        
+
+        # 创建双Y轴图表
+
+        fig_oi = make_subplots(specs=[[{"secondary_y": True}]])
+
+
+
+        # 轴1：价格 (左轴)
+
+        fig_oi.add_trace(
+
+            go.Scatter(x=history_df['timestamp'], y=history_df['price'], name="BTC价格", line=dict(color='orange')),
+
+            secondary_y=False,
+
+        )
+
+
+
+        # 轴2：OI (右轴)
+
+        fig_oi.add_trace(
+
+            go.Scatter(x=history_df['timestamp'], y=history_df['oi'], name="持仓量(OI)", line=dict(color='purple', dash='dot')),
+
+            secondary_y=True,
+
+        )
+
+
+
+        fig_oi.update_layout(height=350, margin=dict(t=10, b=0), hovermode="x unified")
+
+        fig_oi.update_yaxes(title_text="价格 (USDT)", secondary_y=False)
+
+        fig_oi.update_yaxes(title_text="持仓量", secondary_y=True)
+
+        st.plotly_chart(fig_oi, use_container_width=True)
+
+        
+
+        st.caption(f"当前已积累 {len(history_df)} 条历史数据。文件位置: {os.getcwd()}/market_history.csv")
+
+    else:
+
+        st.info("数据积累中... 请等待下一分钟刷新")
 
 
 
@@ -659,4 +883,26 @@ with col_etf2:
 
 
 st.caption("数据来源: Binance Futures (Price/OI/Funding), Yahoo Finance (MSTR), Alternative.me (F&G). 此面板仅供参考，不构成投资建议。")
+
+
+
+if auto_refresh:
+
+    # 倒计时条 (可选)
+
+    # progress_bar = st.sidebar.progress(0)
+
+    # for i in range(60):
+
+    #     time.sleep(1)
+
+    #     progress_bar.progress((i + 1) / 60)
+
+    
+
+    # 简单等待
+
+    time.sleep(60)
+
+    st.rerun()
 

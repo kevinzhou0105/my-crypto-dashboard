@@ -570,6 +570,10 @@ def analyze_orderbook(depth, current_price):
 
 
 
+# --- 界面布局模块 (新版：精简布局) ---
+
+
+
 # Sidebar
 
 st.sidebar.header("配置")
@@ -590,59 +594,91 @@ auto_refresh = st.sidebar.checkbox('⚡️ 开启自动采集 (每60秒)', value
 
 with st.spinner('正在连接交易所...'):
 
-    price, funding_rate, oi, depth, error = get_binance_data(symbol_select)
+    # 获取数据 (注意：这里我们假设你已经用了之前给的 OKX 或者 修复版的 get_binance_data)
 
-    if error:
+    price, funding_rate, oi, depth, error_msg = get_binance_data(symbol_select)
 
-        st.error(f"⚠️ 数据获取错误: {error}")
+    
 
-    ls_ratio = get_ls_ratio(symbol_select.replace('/', ''))
+    if error_msg:
 
-    fg_index = get_fear_greed()
+        st.error(f"⚠️ 数据获取失败: {error_msg}")
 
-    mstr_price, mstr_vol, mstr_avg_vol = get_mstr_data()
+        ls_ratio = 0
 
+        fg_index = 50
 
+        mstr_price, mstr_vol, mstr_avg_vol = 0, 0, 0
 
-# Layout
+    else:
 
-col1, col2, col3 = st.columns(3)
+        ls_ratio = get_ls_ratio(symbol_select.replace('/', ''))
 
+        fg_index = get_fear_greed()
 
-
-with col1:
-
-    st.subheader(f"💰 {symbol_select} 价格")
-
-    st.metric(label="Current Price", value=f"${price:,.2f}")
+        mstr_price, mstr_vol, mstr_avg_vol = get_mstr_data()
 
 
 
-with col2:
+# --- 1. 顶部核心数据栏 (Top Banner) ---
 
-    st.subheader("😨 贪婪恐惧指数")
+# 我们把原本散落在下面的 费率 和 OI 提到最上面，做成 5 列布局
+
+st.subheader("🔥 Market Overview")
+
+
+
+# 定义 5 列
+
+top_c1, top_c2, top_c3, top_c4, top_c5 = st.columns(5)
+
+
+
+with top_c1:
+
+    st.metric(f"💰 {symbol_select}", f"${price:,.2f}")
+
+
+
+with top_c2:
+
+    # 资金费率 (带颜色逻辑)
+
+    fr_pct = funding_rate * 100
+
+    fr_color = "normal"
+
+    if fr_pct > 0.05: fr_color = "off" # 红色警戒
+
+    st.metric("资金费率", f"{fr_pct:.4f}%")
+
+
+
+with top_c3:
+
+    # OI (持仓量)
+
+    st.metric("持仓量 (OI)", f"{oi:,.0f}")
+
+
+
+with top_c4:
+
+    # 贪婪指数
 
     fg_color = "red" if fg_index > 80 else ("green" if fg_index < 20 else "gray")
 
-    st.markdown(f"<h2 style='color:{fg_color}'>{fg_index}</h2>", unsafe_allow_html=True)
-
-    if fg_index > 90: st.warning("⚔️ 绝地武士绿光剑 - 牛市尾声信号！")
-
-    if fg_index < 10: st.success("📉 极度恐惧 - 闭眼定投区间")
+    st.metric("贪婪指数", f"{fg_index}", "F&G Index")
 
 
 
-with col3:
+with top_c5:
 
-    st.subheader("📊 MSTR 监控")
+    # MSTR
 
     vol_ratio = mstr_vol / mstr_avg_vol if mstr_avg_vol else 0
 
-    st.metric("MSTR Price", f"${mstr_price:.2f}")
-
-    st.metric("Vol / Avg Vol", f"{vol_ratio:.1f}x")
-
-    if vol_ratio > 3: st.error("🔥 MSTR 底部爆量 > 3倍 (抄底信号)")
+    st.metric("MSTR股价", f"${mstr_price:.0f}", f"Vol: {vol_ratio:.1f}x")
 
 
 
@@ -650,57 +686,71 @@ st.markdown("---")
 
 
 
-# --- 核心指标区域 ---
+# --- 2. 盘口挂单分布 (原第3部分，现在提上来) ---
+
+# 注意：原本的 "1.资金费率" 和 "2.情绪" 已经删除
+
+st.header("📊 盘口挂单分布 (Order Book)")
+
+bid_vol, ask_vol, ob_signal, wall_alert = analyze_orderbook(depth, price)
 
 
 
-c1, c2 = st.columns(2)
+ob_col1, ob_col2 = st.columns([3, 1])
 
 
 
-# 1. 资金费率
+with ob_col1:
 
-with c1:
+    # --- 盘口绘图代码 (保持你之前的修复版代码不变) ---
 
-    st.header("1. 资金费率 (Funding Rate)")
+    if depth and 'bids' in depth and 'asks' in depth and len(depth['bids']) > 0 and len(depth['asks']) > 0:
 
-    fr_val, fr_msg, fr_col = analyze_funding(funding_rate)
+        try:
 
-    st.metric("当前费率", f"{fr_val:.4f}%")
+            bids_clean = [item[:2] for item in depth['bids']]
 
-    st.markdown(f"<div style='background-color:rgba(100,100,100,0.2);padding:10px;border-left:5px solid {fr_col}'>{fr_msg}</div>", unsafe_allow_html=True)
+            asks_clean = [item[:2] for item in depth['asks']]
 
-    
+            bids_df = pd.DataFrame(bids_clean, columns=['price', 'vol']).astype(float).sort_values('price')
 
-    st.caption("逻辑: >0.1% 减仓 | < -0.05% 抄底")
+            asks_df = pd.DataFrame(asks_clean, columns=['price', 'vol']).astype(float).sort_values('price')
+
+            bids_df['cumulative'] = bids_df['vol'].cumsum()
+
+            asks_df['cumulative'] = asks_df['vol'].cumsum()
+
+            
+
+            fig = go.Figure()
+
+            fig.add_trace(go.Scatter(x=bids_df['price'], y=bids_df['cumulative'], fill='tozeroy', name='买单', line=dict(color='green')))
+
+            fig.add_trace(go.Scatter(x=asks_df['price'], y=asks_df['cumulative'], fill='tozeroy', name='卖单', line=dict(color='red')))
+
+            fig.update_layout(height=300, margin=dict(l=0, r=0, t=30, b=0), paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+
+            st.plotly_chart(fig, use_container_width=True)
+
+        except Exception as e:
+
+            st.warning(f"绘图出错: {e}")
+
+    else:
+
+        st.info("⌛️ 盘口数据加载中...")
 
 
 
-# 2. 多空比与 OI
+with ob_col2:
 
-with c2:
+    st.metric("Top10 买盘", f"{bid_vol:.2f}")
 
-    st.header("2. 情绪与持仓 (LS Ratio & OI)")
+    st.metric("Top10 卖盘", f"{ask_vol:.2f}")
 
-    
+    st.caption(f"状态: {ob_signal}")
 
-    ls_val, ls_msg, ls_col = analyze_ls_ratio(ls_ratio)
-
-    st.metric("顶级账户多空比", f"{ls_val}")
-
-    st.markdown(f"<div style='background-color:rgba(100,100,100,0.2);padding:10px;border-left:5px solid {ls_col}'>{ls_msg}</div>", unsafe_allow_html=True)
-
-    
-
-    st.markdown("---")
-
-    st.metric("未平仓合约 (OI)", f"{oi:,.0f} {symbol_select.split('/')[0]}")
-
-    st.info("💡 记得对比价格走势：价格新高+OI跌=跑路; 价格新高+OI高=趋势健康")
-
-
-
-st.markdown("---")
+    if wall_alert: st.error(wall_alert)
 
 
 

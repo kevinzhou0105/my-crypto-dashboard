@@ -496,31 +496,97 @@ ob_col1, ob_col2 = st.columns([3, 1])
 
 with ob_col1:
 
-    # 绘制简易深度图
+    # --- 修复开始：增加空数据检查 ---
 
-    bids_df = pd.DataFrame(depth['bids'], columns=['price', 'vol']).sort_values('price')
+    # 只有当 bids 和 asks 都有数据时，才进行绘图
 
-    asks_df = pd.DataFrame(depth['asks'], columns=['price', 'vol']).sort_values('price')
+    if depth and 'bids' in depth and 'asks' in depth and len(depth['bids']) > 0 and len(depth['asks']) > 0:
 
-    
+        try:
 
-    # 累计量
+            # 1. 安全创建 DataFrame
 
-    bids_df['cumulative'] = bids_df['vol'].cumsum()
+            bids_df = pd.DataFrame(depth['bids'], columns=['price', 'vol']).astype(float).sort_values('price')
 
-    asks_df['cumulative'] = asks_df['vol'].cumsum()
+            asks_df = pd.DataFrame(depth['asks'], columns=['price', 'vol']).astype(float).sort_values('price')
 
-    
+            
 
-    fig = go.Figure()
+            # 2. 计算累计量 (Cumulative)
 
-    fig.add_trace(go.Scatter(x=bids_df['price'], y=bids_df['cumulative'], fill='tozeroy', name='买单 (Bids)', line=dict(color='green')))
+            bids_df['cumulative'] = bids_df['vol'].cumsum()
 
-    fig.add_trace(go.Scatter(x=asks_df['price'], y=asks_df['cumulative'], fill='tozeroy', name='卖单 (Asks)', line=dict(color='red')))
+            asks_df['cumulative'] = asks_df['vol'].cumsum()
 
-    fig.update_layout(title="买卖盘深度对比 (Top 20档)", height=300, margin=dict(l=0, r=0, t=30, b=0))
+            
 
-    st.plotly_chart(fig, use_container_width=True)
+            # 3. 绘图
+
+            fig = go.Figure()
+
+            # 买单区域 (绿色)
+
+            fig.add_trace(go.Scatter(
+
+                x=bids_df['price'], 
+
+                y=bids_df['cumulative'], 
+
+                fill='tozeroy', 
+
+                name='买单 (Bids)', 
+
+                line=dict(color='green')
+
+            ))
+
+            # 卖单区域 (红色)
+
+            fig.add_trace(go.Scatter(
+
+                x=asks_df['price'], 
+
+                y=asks_df['cumulative'], 
+
+                fill='tozeroy', 
+
+                name='卖单 (Asks)', 
+
+                line=dict(color='red')
+
+            ))
+
+            
+
+            fig.update_layout(
+
+                title="买卖盘深度对比 (Top 20档)", 
+
+                height=300, 
+
+                margin=dict(l=0, r=0, t=30, b=0),
+
+                xaxis_title="价格",
+
+                yaxis_title="累计数量"
+
+            )
+
+            st.plotly_chart(fig, use_container_width=True)
+
+            
+
+        except Exception as e:
+
+            st.warning(f"绘图数据处理出错: {e}")
+
+    else:
+
+        # 如果数据为空，显示占位符
+
+        st.info("⌛️ 盘口数据加载中，或交易所暂未返回深度数据...")
+
+        # --- 修复结束 ---
 
 
 

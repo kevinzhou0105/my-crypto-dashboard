@@ -34,19 +34,37 @@ st.markdown("---")
 
 
 
+# --- 替换整个数据获取模块 (改为 OKX 源) ---
+
+
+
 @st.cache_data(ttl=60)
 
 def get_binance_data(symbol='BTC/USDT'):
 
-    # 云端服务器在美国，不需要 proxies 参数
+    # 强制将 symbol 转换为 OKX 的永续合约格式
+
+    # 例如: BTC/USDT -> BTC/USDT:USDT
+
+    if ':' not in symbol:
+
+        okx_symbol = f"{symbol}:USDT"
+
+    else:
+
+        okx_symbol = symbol
+
+
 
     try:
 
-        # 纯净连接
+        # 1. 尝试连接 OKX
 
-        exchange = ccxt.binanceusdm({
+        # OKX 相比 Binance 对云服务器 IP 更友好
 
-            'timeout': 30000, 
+        exchange = ccxt.okx({
+
+            'timeout': 10000, 
 
             'enableRateLimit': True
 
@@ -54,35 +72,53 @@ def get_binance_data(symbol='BTC/USDT'):
 
         
 
-        ticker = exchange.fetch_ticker(symbol)
+        # 获取数据
+
+        ticker = exchange.fetch_ticker(okx_symbol)
 
         price = ticker['last']
 
         
 
-        funding = exchange.fetch_funding_rate(symbol)
+        funding = exchange.fetch_funding_rate(okx_symbol)
 
         funding_rate = funding['fundingRate']
 
         
 
-        oi_data = exchange.fetch_open_interest(symbol)
+        oi_data = exchange.fetch_open_interest(okx_symbol)
 
         open_interest = oi_data['openInterestAmount']
 
         
 
-        depth = exchange.fetch_order_book(symbol, limit=20)
+        # OKX 的 orderbook 获取
+
+        depth = exchange.fetch_order_book(okx_symbol, limit=20)
 
         
 
-        return price, funding_rate, open_interest, depth, None 
+        return price, funding_rate, open_interest, depth, None
 
 
 
     except Exception as e:
 
-        return 0, 0, 0, {'bids': [], 'asks': []}, str(e)
+        # 如果 OKX 也报错，说明云服务器被所有头部交易所拉黑了
+
+        error_msg = (
+
+            f"❌ 数据获取失败。\n"
+
+            f"原因: 您的云服务器 IP (美国) 可能被交易所屏蔽。\n"
+
+            f"建议: 请回到本地电脑运行此程序 (记得开启 VPN 代理)。\n"
+
+            f"底层报错: {str(e)}"
+
+        )
+
+        return 0, 0, 0, {'bids': [], 'asks': []}, error_msg
 
 
 

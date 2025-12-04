@@ -250,7 +250,15 @@ def analyze_ls_ratio(ratio):
 
 def analyze_orderbook(depth, current_price):
 
-    """四、盘口分析 (简化版)"""
+    """四、盘口分析 (修复版 - 增加空数据保护)"""
+
+    # 1. 安全检查：如果数据为空，直接返回默认值
+
+    if not depth or 'bids' not in depth or 'asks' not in depth:
+
+        return 0, 0, "数据暂不可用", ""
+
+        
 
     bids = depth['bids']
 
@@ -258,11 +266,21 @@ def analyze_orderbook(depth, current_price):
 
     
 
-    # 计算前10档的厚度
+    # 2. 二次检查：确保列表里至少有数据
 
-    bid_vol_top = sum([item[1] for item in bids[:10]])
+    if len(bids) == 0 or len(asks) == 0:
 
-    ask_vol_top = sum([item[1] for item in asks[:10]])
+        return 0, 0, "盘口数据为空 (可能API受限)", ""
+
+
+
+    # 计算前10档的厚度 (防止不足10档时报错)
+
+    limit = min(10, len(bids), len(asks))
+
+    bid_vol_top = sum([item[1] for item in bids[:limit]])
+
+    ask_vol_top = sum([item[1] for item in asks[:limit]])
 
     
 
@@ -278,13 +296,19 @@ def analyze_orderbook(depth, current_price):
 
     
 
-    # 简单的"大单"检测 (假设 > 20 BTC 为大单)
+    # 大单检测
 
     big_wall_check = ""
 
-    if bids[0][1] > 20: big_wall_check += f"⚠️ 发现买一 {bids[0][0]} 处有大单 ({bids[0][1]} BTC) - 警惕假护盘"
+    # 确保有数据才去读第0个元素
 
-    if asks[0][1] > 20: big_wall_check += f"⚠️ 发现卖一 {asks[0][0]} 处有大单 ({asks[0][1]} BTC) - 警惕假压盘"
+    if len(bids) > 0 and bids[0][1] > 20: 
+
+        big_wall_check += f"⚠️ 发现买一 {bids[0][0]} 处有大单 ({bids[0][1]}) "
+
+    if len(asks) > 0 and asks[0][1] > 20: 
+
+        big_wall_check += f"⚠️ 发现卖一 {asks[0][0]} 处有大单 ({asks[0][1]}) "
 
     
 

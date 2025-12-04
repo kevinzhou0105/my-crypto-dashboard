@@ -308,101 +308,6 @@ def get_mstr_data():
 
 
 
-# --- 💾 历史数据管理模块 (新增) ---
-
-
-
-def update_market_history(current_price, current_funding, current_oi):
-
-    file_path = 'market_history.csv' # 文件会保存在脚本同级目录
-
-    now = datetime.now()
-
-    
-
-    # 1. 初始化 DataFrame
-
-    if os.path.exists(file_path):
-
-        try:
-
-            df = pd.read_csv(file_path)
-
-            # 转换时间列格式
-
-            df['timestamp'] = pd.to_datetime(df['timestamp'])
-
-        except:
-
-            # 如果文件损坏，重置
-
-            df = pd.DataFrame(columns=['timestamp', 'price', 'funding_rate', 'oi'])
-
-    else:
-
-        # 如果文件不存在，新建
-
-        df = pd.DataFrame(columns=['timestamp', 'price', 'funding_rate', 'oi'])
-
-    # 2. 写入逻辑：防抖动
-
-    # 只有当文件为空，或者最后一条数据距离现在超过 60 秒才写入
-
-    should_save = True
-
-    if not df.empty:
-
-        last_time = df.iloc[-1]['timestamp']
-
-        # 计算时间差
-
-        time_diff = (now - last_time).total_seconds()
-
-        if time_diff < 60:  # 不足60秒，不保存
-
-            should_save = False
-
-    
-
-    if should_save:
-
-        # 构造新数据
-
-        new_data = pd.DataFrame([{
-
-            'timestamp': now,
-
-            'price': float(current_price),
-
-            'funding_rate': float(current_funding),
-
-            'oi': float(current_oi)
-
-        }])
-
-        
-
-        # 拼接并处理空值
-
-        if not df.empty:
-
-            df = pd.concat([df, new_data], ignore_index=True)
-
-        else:
-
-            df = new_data
-
-            
-
-        # 💾 保存回文件
-
-        df.to_csv(file_path, index=False)
-
-        print(f"✅ 数据已保存: {now.strftime('%H:%M:%S')}") # 终端提示
-
-    
-
-    return df
 
 
 
@@ -582,12 +487,6 @@ symbol_select = st.sidebar.selectbox("选择币种", ["BTC/USDT", "ETH/USDT"])
 
 refresh = st.sidebar.button("刷新数据")
 
-# --- 🔄 自动刷新模块 ---
-
-st.sidebar.markdown("---")
-
-auto_refresh = st.sidebar.checkbox('⚡️ 开启自动采集 (每60秒)', value=False)
-
 
 
 # Main Data Fetch
@@ -756,165 +655,147 @@ with ob_col2:
 
 st.markdown("---")
 
-st.header("📈 核心指标趋势追踪 (每分钟记录)")
+st.header("📈 核心指标趋势追踪 (后台每5分钟记录)")
 
+# --- 修改后的历史数据读取逻辑 ---
 
+csv_file = 'market_history.csv'
 
-# 1. 只有当获取到有效价格时，才进行记录
+if os.path.exists(csv_file):
 
-if price > 0:
+    try:
 
-    history_df = update_market_history(price, funding_rate, oi)
+        # 1. 读取 CSV
 
+        history_df = pd.read_csv(csv_file)
 
+        history_df['timestamp'] = pd.to_datetime(history_df['timestamp'])
 
-    if not history_df.empty and len(history_df) > 1:
+        
 
-        # 准备数据
+        # 2. 排序并取最近数据 (防止图表过密)
 
         history_df = history_df.sort_values('timestamp')
 
         
 
-        # --- 图表 A: 资金费率趋势 (现代风) ---
+        # 3. 绘图 (代码完全复用之前的现代风格代码)
 
-        st.subheader("1. 资金费率历史走势")
+        if not history_df.empty:
 
-        fig_fr = go.Figure()
+            
 
-        fig_fr.add_trace(go.Scatter(
+            # --- 图表 A: 资金费率 ---
 
-            x=history_df['timestamp'], 
+            st.subheader("1. 资金费率历史走势")
 
-            y=history_df['funding_rate'] * 100, 
+            fig_fr = go.Figure()
 
-            mode='lines',
-
-            fill='tozeroy',  # ✨ 关键：填充面积
-
-            name='费率 %',
-
-            line=dict(color='#4facfe', width=3), # 现代亮蓝
-
-            fillcolor='rgba(79, 172, 254, 0.1)'  # 半透明填充
-
-        ))
-
-        
-
-        # 警戒线 (样式微调)
-
-        fig_fr.add_hline(y=0.01, line_dash="dash", line_color="#adb5bd", annotation_text="基准")
-
-        fig_fr.add_hline(y=0.05, line_dash="dash", line_color="#ff6b6b", annotation_text="高费率")
-
-        
-
-        # 布局美化
-
-        fig_fr.update_layout(
-
-            height=300, 
-
-            margin=dict(t=10, b=0, l=0, r=0),
-
-            paper_bgcolor='rgba(0,0,0,0)', # 透明背景
-
-            plot_bgcolor='rgba(0,0,0,0)',  # 透明绘图区
-
-            yaxis=dict(gridcolor='#f1f3f5'), # 极淡的网格线
-
-            xaxis=dict(gridcolor='#f1f3f5'),
-
-            yaxis_title="费率 (%)"
-
-        )
-
-        st.plotly_chart(fig_fr, use_container_width=True)
-
-        # --- 图表 B: 价格 vs OI (现代风) ---
-
-        st.subheader("2. 价格 vs 持仓量 (Price & OI)")
-
-        
-
-        fig_oi = make_subplots(specs=[[{"secondary_y": True}]])
-
-        # 轴1：价格 (橙色渐变风)
-
-        fig_oi.add_trace(
-
-            go.Scatter(
+            fig_fr.add_trace(go.Scatter(
 
                 x=history_df['timestamp'], 
 
-                y=history_df['price'], 
-
-                name="BTC价格", 
+                y=history_df['funding_rate'] * 100, 
 
                 mode='lines',
 
-                line=dict(color='#fa709a', width=3) # 蜜桃粉橙
+                fill='tozeroy',
 
-            ),
+                name='费率 %',
 
-            secondary_y=False,
+                line=dict(color='#4facfe', width=3),
 
-        )
+                fillcolor='rgba(79, 172, 254, 0.1)'
 
-        # 轴2：OI (紫色)
+            ))
 
-        fig_oi.add_trace(
+            fig_fr.add_hline(y=0.01, line_dash="dash", line_color="#adb5bd", annotation_text="基准")
 
-            go.Scatter(
+            fig_fr.add_hline(y=0.05, line_dash="dash", line_color="#ff6b6b", annotation_text="高费率")
 
-                x=history_df['timestamp'], 
+            fig_fr.update_layout(
 
-                y=history_df['oi'], 
+                height=300, 
 
-                name="持仓量(OI)", 
+                margin=dict(t=10, b=0, l=0, r=0),
 
-                mode='lines',
+                paper_bgcolor='rgba(0,0,0,0)',
 
-                line=dict(color='#667eea', width=2, dash='dot') # 皇家蓝
+                plot_bgcolor='rgba(0,0,0,0)',
 
-            ),
+                yaxis=dict(gridcolor='#f1f3f5'),
 
-            secondary_y=True,
+                xaxis=dict(gridcolor='#f1f3f5')
 
-        )
+            )
 
-        fig_oi.update_layout(
+            st.plotly_chart(fig_fr, use_container_width=True)
 
-            height=350, 
+            # --- 图表 B: 价格 vs OI ---
 
-            margin=dict(t=10, b=0, l=0, r=0),
+            st.subheader("2. 价格 vs 持仓量 (Price & OI)")
 
-            paper_bgcolor='rgba(0,0,0,0)',
+            fig_oi = make_subplots(specs=[[{"secondary_y": True}]])
 
-            plot_bgcolor='rgba(0,0,0,0)',
+            
 
-            yaxis=dict(gridcolor='#f1f3f5', showgrid=True),
+            fig_oi.add_trace(
 
-            hovermode="x unified"
+                go.Scatter(x=history_df['timestamp'], y=history_df['price'], name="BTC价格", mode='lines', line=dict(color='#fa709a', width=3)),
 
-        )
+                secondary_y=False,
 
-        fig_oi.update_yaxes(title_text="价格 (USDT)", secondary_y=False)
+            )
 
-        fig_oi.update_yaxes(title_text="持仓量", secondary_y=True, showgrid=False)
+            fig_oi.add_trace(
 
-        
+                go.Scatter(x=history_df['timestamp'], y=history_df['oi'], name="持仓量(OI)", mode='lines', line=dict(color='#667eea', width=2, dash='dot')),
 
-        st.plotly_chart(fig_oi, use_container_width=True)
+                secondary_y=True,
 
-        
+            )
 
-        st.caption(f"当前已积累 {len(history_df)} 条历史数据。文件位置: {os.getcwd()}/market_history.csv")
+            fig_oi.update_layout(
 
-    else:
+                height=350, 
 
-        st.info("数据积累中... 请等待下一分钟刷新")
+                margin=dict(t=10, b=0, l=0, r=0),
+
+                paper_bgcolor='rgba(0,0,0,0)',
+
+                plot_bgcolor='rgba(0,0,0,0)',
+
+                yaxis=dict(gridcolor='#f1f3f5', showgrid=True),
+
+                hovermode="x unified"
+
+            )
+
+            fig_oi.update_yaxes(title_text="价格", secondary_y=False)
+
+            fig_oi.update_yaxes(title_text="持仓量", secondary_y=True, showgrid=False)
+
+            st.plotly_chart(fig_oi, use_container_width=True)
+
+            
+
+            st.caption(f"数据来源: {csv_file} | 最近更新: {history_df.iloc[-1]['timestamp']}")
+
+            
+
+    except Exception as e:
+
+        st.error(f"读取历史数据出错: {e}")
+
+else:
+
+    st.info("👋 尚未发现历史数据文件。请先运行 'collector.py' 脚本开始采集。")
+
+# 增加一个手动刷新按钮，方便你想看最新图表时点一下
+
+if st.button('🔄 刷新图表'):
+
+    st.rerun()
 
 
 
@@ -1097,26 +978,4 @@ with col_etf2:
 
 
 st.caption("数据来源: Binance Futures (Price/OI/Funding), Yahoo Finance (MSTR), Alternative.me (F&G). 此面板仅供参考，不构成投资建议。")
-
-
-
-if auto_refresh:
-
-    # 倒计时条 (可选)
-
-    # progress_bar = st.sidebar.progress(0)
-
-    # for i in range(60):
-
-    #     time.sleep(1)
-
-    #     progress_bar.progress((i + 1) / 60)
-
-    
-
-    # 简单等待
-
-    time.sleep(60)
-
-    st.rerun()
 

@@ -736,9 +736,21 @@ if os.path.exists(csv_file):
 
             
 
-            # --- 图表 A: 资金费率 ---
+            # --- 图表 A: 资金费率历史走势 (智能缩放版) ---
 
             st.subheader("1. 资金费率历史走势")
+
+            
+
+            # 准备数据
+
+            fr_data = history_df['funding_rate'] * 100
+
+            max_fr = fr_data.max()
+
+            min_fr = fr_data.min()
+
+            
 
             fig_fr = go.Figure()
 
@@ -746,23 +758,51 @@ if os.path.exists(csv_file):
 
                 x=history_df['timestamp'], 
 
-                y=history_df['funding_rate'] * 100, 
+                y=fr_data, 
 
-                mode='lines',
+                mode='lines', 
 
-                fill='tozeroy',
+                fill='tozeroy', 
 
                 name='费率 %',
 
-                line=dict(color='#4facfe', width=3),
+                line=dict(color='#4facfe', width=3), 
 
                 fillcolor='rgba(79, 172, 254, 0.1)'
 
             ))
 
-            fig_fr.add_hline(y=0.01, line_dash="dash", line_color="#adb5bd", annotation_text="基准")
+            
 
-            fig_fr.add_hline(y=0.05, line_dash="dash", line_color="#ff6b6b", annotation_text="高费率")
+            # 💡 智能参考线逻辑：
+
+            # 1. 只有当费率真的很高 (>0.03%) 时，才显示 0.05% 的红色警戒线
+
+            #    否则会把画面拉得太远，导致看不清微小波动
+
+            if max_fr > 0.03:
+
+                fig_fr.add_hline(y=0.05, line_dash="dash", line_color="#ff6b6b", annotation_text="高费率警戒")
+
+            
+
+            # 2. 只有当费率接近基准 (>0.005%) 时，才显示 0.01% 基准线
+
+            if max_fr > 0.008:
+
+                fig_fr.add_hline(y=0.01, line_dash="dash", line_color="#adb5bd", annotation_text="基准")
+
+                
+
+            # 3. 动态设置 Y 轴范围，确保波动可见
+
+            #    上下各留 20% 的余量，让曲线居中
+
+            y_range_diff = max_fr - min_fr
+
+            if y_range_diff < 0.001: y_range_diff = 0.001 # 防止波动太小时报错
+
+            
 
             fig_fr.update_layout(
 
@@ -770,11 +810,19 @@ if os.path.exists(csv_file):
 
                 margin=dict(t=10, b=0, l=0, r=0),
 
-                paper_bgcolor='rgba(0,0,0,0)',
+                paper_bgcolor='rgba(0,0,0,0)', 
 
                 plot_bgcolor='rgba(0,0,0,0)',
 
-                yaxis=dict(gridcolor='#f1f3f5'),
+                yaxis=dict(
+
+                    gridcolor='#f1f3f5',
+
+                    # 强制动态缩放
+
+                    range=[min_fr - y_range_diff*0.5, max_fr + y_range_diff*0.5] 
+
+                ),
 
                 xaxis=dict(gridcolor='#f1f3f5')
 
